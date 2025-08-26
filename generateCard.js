@@ -1,79 +1,164 @@
 import fs from "fs";
 
-const npcs = [
-  {
-    name: "Гракх",
-    race: "Орк",
-    role: "Наёмник",
-    stats: { hp: 45, ac: 14, speed: "30 ft" },
-    abilitiesScores: { С: 4, Л: 0, Т: 5, И: -1, М: 3, Х: -2 },
-    attacks: [
-      { name: "Топор", bonus: "+5", damage: "1d12+3" },
-      { name: "Пинок", bonus: "+3", damage: "1d6+2" },
-    ],
-    abilities: ["Ярость: +2 к урону, если меньше половины HP", "Устрашение: враг делает спасбросок WIS"],
-    notes: "Предпочитает ближний бой, боится магии.",
-  },
-  {
-    name: "Серин",
-    race: "Эльф",
-    role: "Лучница",
-    stats: { hp: 28, ac: 16, speed: "35 ft" },
-    abilitiesScores: { С: 1, Л: 4, Т: 0, И: 3, М: 2, Х: 1 },
-    attacks: [
-      { name: "Лук", bonus: "+6", damage: "1d8+4" },
-      { name: "Кинжал", bonus: "+4", damage: "1d4+2" },
-    ],
-    abilities: ["Скрытность: advantage на Stealth", "Меткий выстрел: +2 к урону дальнобойным оружием"],
-    notes: "Осторожна, предпочитает атаковать из укрытия.",
-  },
-];
+const VERSION = "1.1"; // Версия скрипта
+
+const calcAbilityModifier = score => Math.floor((score - 10) / 2);
+
+// --- helpers: CR formatting & proficiency ---
+function parseCR(raw) {
+  // Принимает число (0.125) или строку ("1/8", "2")
+  if (raw == null) return null;
+  if (typeof raw === "number") return raw;
+
+  const s = String(raw).trim();
+  if (s.includes("/")) {
+    const [n, d] = s.split("/").map(Number);
+    if (!isNaN(n) && !isNaN(d) && d !== 0) return n / d;
+    return null;
+  }
+  const num = Number(s.replace(",", ".")); // на всякий случай
+  return isNaN(num) ? null : num;
+}
+
+function formatCR(value) {
+  if (value == null) return null;
+  const v = Number(value);
+
+  // Почти-равенства для дробей
+  const eq = (a, b, eps = 1e-6) => Math.abs(a - b) < eps;
+
+  if (eq(v, 0)) return "0";
+  if (eq(v, 0.125)) return "1/8";
+  if (eq(v, 0.25)) return "1/4";
+  if (eq(v, 0.5)) return "1/2";
+
+  // Целые красиво без .0
+  if (Number.isInteger(v)) return String(v);
+
+  // На всякий случай: показать до 2 знаков
+  return v.toFixed(2).replace(/\.00$/, "");
+}
+
+function proficiencyByCR(rawCR) {
+  const cr = parseCR(rawCR);
+  if (cr == null) return null;
+
+  if (cr <= 4) return 2; // включает 0, 1/8, 1/4, 1/2, 1..4
+  if (cr <= 8) return 3;
+  if (cr <= 12) return 4;
+  if (cr <= 16) return 5;
+  if (cr <= 20) return 6;
+  if (cr <= 24) return 7;
+  if (cr <= 28) return 8;
+  return 9; // 29–30
+}
+
+// Загружаем JSON из файла
+const raw = fs.readFileSync("Bandit.json", "utf-8");
+const npcs = JSON.parse(raw);
 
 function renderCard(npc) {
-  const abilitiesHeader = "С Л Т И М Х";
-  const abilitiesValues = `${npc.abilitiesScores.S} ${npc.abilitiesScores.L} ${npc.abilitiesScores.T} ${npc.abilitiesScores.I} ${npc.abilitiesScores.M} ${npc.abilitiesScores.X}`;
+  const sys = npc.system || {};
 
-  Object.keys(npc.abilitiesScores).forEach;
+  // Характеристики (если есть)
+  const abilities = sys.abilities
+    ? [
+        ["С", calcAbilityModifier(sys.abilities.str?.value)],
+        ["Л", calcAbilityModifier(sys.abilities.dex?.value)],
+        ["Т", calcAbilityModifier(sys.abilities.con?.value)],
+        ["И", calcAbilityModifier(sys.abilities.int?.value)],
+        ["М", calcAbilityModifier(sys.abilities.wis?.value)],
+        ["Х", calcAbilityModifier(sys.abilities.cha?.value)],
+      ].filter(([_, v]) => v != null)
+    : [];
+
+  // Основные статы
+  const hp = sys.attributes?.hp?.value;
+  let ac = sys.attributes?.ac?.value || sys.attributes?.ac?.calc;
+  if (ac === "default") {
+    ac = 10 + calcAbilityModifier(sys.abilities?.dex?.value);
+  }
+  const speed = sys.attributes?.movement?.walk;
+
+  // Атаки = предметы-оружие
+  const attacks = (npc.items || [])
+    .filter(i => i.type === "weapon")
+    .map(w => {
+      const has = sys.abilities[w.system?.properties?.some(w => w === "amm" || w === "fin") ? "dex" : "str"].value;
+      // Если есть фехтовальное или боеприпас - то ловкость
+      let attribute = calcAbilityModifier(has) + proficiencyByCR(sys.details?.cr);
+
+      let dmg = w.system?.damage?.parts?.[0] || [];
+
+      dmg = dmg.join(" ").trim().replace(/\s+/g, " ").replace("@mod", attribute) || "—";
+
+      return {
+        name: w.name,
+        bonus: w.system?.attackBonus || "",
+        damage: dmg,
+      };
+    });
+
+  // Способности (feats и classFeatures)
+  const abilitiesList = (npc.items || []).filter(i => ["feat", "classFeature"].includes(i.type)).map(f => f.name);
+
+  // Заметки
+  const notes = sys.details?.biography?.value || sys.details?.type?.value || "";
 
   return `
     <div class="card">
-      <h2>${npc.name}</h2>
-      <div><i>${npc.race} — ${npc.role}</i></div>
+      <h6>${npc.name}</h6>
+      <div><i>${sys.details?.type?.subtype || ""} — ${sys.details?.alignment || ""}</i></div>
 
-      <div class="attributes">
-        ${Object.entries(npc.abilitiesScores)
-          .map(
-            ([key, value]) => `
-          <div class="attribute">
-            <span>${key}</span> <span>${value}</span>
-          </div>
-        `,
-          )
-          .join("")}
-      </div>
+      ${
+        abilities.length
+          ? `<div class="attributes">
+          ${abilities
+            .map(
+              ([k, v]) => `
+            <div class="attribute">
+              <span>${k}</span> <span>${v}</span>
+            </div>
+          `,
+            )
+            .join("")}
+        </div>`
+          : ""
+      }
 
-      <div class="section">
-        <b>Статы:</b><br>
-        HP: ${npc.stats.hp}, AC: ${npc.stats.ac}, Speed: ${npc.stats.speed}
-      </div>
+      ${
+        hp || ac || speed
+          ? `<div class="section">
+          ${hp ? `ХИ: ${hp}` : ""} 
+          ${ac ? `КД: ${ac}` : ""} 
+          ${speed ? `СК: ${speed}` : ""}
+        </div>`
+          : ""
+      }
 
-      <div class="section">
+      ${
+        attacks.length
+          ? `<div class="section">
         <b>Атаки:</b>
         <ul>
-          ${npc.attacks.map(a => `<li>${a.name} (${a.bonus}) — ${a.damage}</li>`).join("")}
+          ${attacks.map(a => `<li>${a.name} ${a.bonus ? `(${a.bonus})` : ""} — ${a.damage}</li>`).join("")}
         </ul>
-      </div>
+      </div>`
+          : ""
+      }
 
-      <div class="section">
+      ${
+        abilitiesList.length
+          ? `<div class="section">
         <b>Способности:</b>
         <ul>
-          ${npc.abilities.map(ab => `<li>${ab}</li>`).join("")}
+          ${abilitiesList.map(ab => `<li>${ab}</li>`).join("")}
         </ul>
-      </div>
+      </div>`
+          : ""
+      }
 
-      <div class="section">
-        <b>Заметки:</b> ${npc.notes}
-      </div>
+      ${notes ? `<div class="section"><b>Заметки:</b> ${notes}</div>` : ""}
     </div>
   `;
 }
@@ -83,7 +168,7 @@ function generateHTML(npcs) {
   <html>
   <head>
     <meta charset="utf-8"/>
-    <style> 
+    <style>
       body {
         font-family: Arial, sans-serif;
         display: flex;
@@ -92,55 +177,36 @@ function generateHTML(npcs) {
         gap: 16px;
         padding: 16px;
       }
-
       .card {
         width: 250px;
         border: 2px solid #333;
         border-radius: 8px;
         padding: 10px;
-        box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.2);
+        box-shadow: 2px 2px 6px rgba(0,0,0,0.2);
       }
-
-      .card h2 {
-        margin: 0;
-        font-size: 18px;
-      }
-
-      .abilities {
-        margin-top: 6px;
-        font-size: 14px;
-      }
-
+      .card h6 { margin: 0; font-size: 18px; }
       .attributes {
         margin-top: 6px;
         font-size: 14px;
         display: flex;
         justify-content: space-between;
+        padding: 0 8px;
       }
-
       .attribute {
         display: flex;
         flex-direction: column;
         background: #f0f0f0;
-        padding: 8px;
-        gap: 4px;
-        border-radius: 20px;
+        padding: 6px;
+        gap: 2px;
+        border-radius: 12px;
         text-align: center;
       }
-
-      .section {
-        margin-top: 8px;
-        font-size: 14px;
-      }
-
-      ul {
-        margin: 4px 0;
-        padding-left: 18px;
-      }
+      .section { margin-top: 8px; font-size: 14px; }
+      ul { margin: 4px 0; padding-left: 18px; }
     </style>
   </head>
   <body>
-    ${npcs.map(renderCard).join("")}
+    ${[npcs].map(renderCard).join("")}
   </body>
   </html>
   `;
@@ -148,3 +214,152 @@ function generateHTML(npcs) {
 }
 
 generateHTML(npcs);
+
+// const npcsData = [
+//   {
+//     name: "Гракх",
+//     race: "Орк",
+//     role: "Наёмник",
+//     stats: { hp: 45, ac: 14, speed: "30 ft" },
+//     abilitiesScores: { С: 4, Л: 0, Т: 5, И: -1, М: 3, Х: -2 },
+//     attacks: [
+//       { name: "Топор", bonus: "+5", damage: "1d12+3" },
+//       { name: "Пинок", bonus: "+3", damage: "1d6+2" },
+//     ],
+//     abilities: ["Ярость: +2 к урону, если меньше половины HP", "Устрашение: враг делает спасбросок WIS"],
+//     notes: "Предпочитает ближний бой, боится магии.",
+//   },
+//   {
+//     name: "Серин",
+//     race: "Эльф",
+//     role: "Лучница",
+//     stats: { hp: 28, ac: 16, speed: "35 ft" },
+//     abilitiesScores: { С: 1, Л: 4, Т: 0, И: 3, М: 2, Х: 1 },
+//     attacks: [
+//       { name: "Лук", bonus: "+6", damage: "1d8+4" },
+//       { name: "Кинжал", bonus: "+4", damage: "1d4+2" },
+//     ],
+//     abilities: ["Скрытность: advantage на Stealth", "Меткий выстрел: +2 к урону дальнобойным оружием"],
+//     notes: "Осторожна, предпочитает атаковать из укрытия.",
+//   },
+// ];
+
+// function renderCardFromScrap(npc) {
+//   const abilitiesHeader = "С Л Т И М Х";
+//   const abilitiesValues = `${npc.abilitiesScores.S} ${npc.abilitiesScores.L} ${npc.abilitiesScores.T} ${npc.abilitiesScores.I} ${npc.abilitiesScores.M} ${npc.abilitiesScores.X}`;
+
+//   Object.keys(npc.abilitiesScores).forEach;
+
+//   return `
+//     <div class="card">
+//       <h2>${npc.name}</h2>
+//       <div><i>${npc.race} — ${npc.role}</i></div>
+
+//       <div class="attributes">
+//         ${Object.entries(npc.abilitiesScores)
+//           .map(
+//             ([key, value]) => `
+//           <div class="attribute">
+//             <span>${key}</span> <span>${value}</span>
+//           </div>
+//         `,
+//           )
+//           .join("")}
+//       </div>
+
+//       <div class="section">
+//         <b>Статы:</b><br>
+//         HP: ${npc.stats.hp}, AC: ${npc.stats.ac}, Speed: ${npc.stats.speed}
+//       </div>
+
+//       <div class="section">
+//         <b>Атаки:</b>
+//         <ul>
+//           ${npc.attacks.map(a => `<li>${a.name} (${a.bonus}) — ${a.damage}</li>`).join("")}
+//         </ul>
+//       </div>
+
+//       <div class="section">
+//         <b>Способности:</b>
+//         <ul>
+//           ${npc.abilities.map(ab => `<li>${ab}</li>`).join("")}
+//         </ul>
+//       </div>
+
+//       <div class="section">
+//         <b>Заметки:</b> ${npc.notes}
+//       </div>
+//     </div>
+//   `;
+// }
+
+// function generateHTMLFromScrap(npcs) {
+//   const html = `
+//   <html>
+//   <head>
+//     <meta charset="utf-8"/>
+//     <style>
+//       body {
+//         font-family: Arial, sans-serif;
+//         display: flex;
+//         flex-wrap: wrap;
+//         align-content: flex-start;
+//         gap: 16px;
+//         padding: 16px;
+//       }
+
+//       .card {
+//         width: 250px;
+//         border: 2px solid #333;
+//         border-radius: 8px;
+//         padding: 10px;
+//         box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.2);
+//       }
+
+//       .card h2 {
+//         margin: 0;
+//         font-size: 18px;
+//       }
+
+//       .abilities {
+//         margin-top: 6px;
+//         font-size: 14px;
+//       }
+
+//       .attributes {
+//         margin-top: 6px;
+//         font-size: 14px;
+//         display: flex;
+//         justify-content: space-between;
+//       }
+
+//       .attribute {
+//         display: flex;
+//         flex-direction: column;
+//         background: #f0f0f0;
+//         padding: 8px;
+//         gap: 4px;
+//         border-radius: 20px;
+//         text-align: center;
+//       }
+
+//       .section {
+//         margin-top: 8px;
+//         font-size: 14px;
+//       }
+
+//       ul {
+//         margin: 4px 0;
+//         padding-left: 18px;
+//       }
+//     </style>
+//   </head>
+//   <body>
+//     ${npcsData.map(renderCardFromScrap).join("")}
+//   </body>
+//   </html>
+//   `;
+//   fs.writeFileSync("npcs.html", html, "utf-8");
+// }
+
+// generateHTMLFromScrap(npcsData);
