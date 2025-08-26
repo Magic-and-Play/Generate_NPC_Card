@@ -86,7 +86,7 @@ function renderCard(npc) {
     .map(w => {
       const has = sys.abilities[w.system?.properties?.some(w => w === "amm" || w === "fin") ? "dex" : "str"].value;
       // Если есть фехтовальное или боеприпас - то ловкость
-      let attribute = calcAbilityModifier(has) + proficiencyByCR(sys.details?.cr);
+      let attribute = calcAbilityModifier(has);
 
       let dmg = w.system?.damage?.parts?.[0] || [];
 
@@ -94,7 +94,7 @@ function renderCard(npc) {
 
       return {
         name: w.name,
-        bonus: w.system?.attackBonus || "",
+        bonus: w.system?.attackBonus || attribute + proficiencyByCR(sys.details?.cr),
         damage: dmg,
       };
     });
