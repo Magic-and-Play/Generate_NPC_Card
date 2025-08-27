@@ -1,0 +1,89 @@
+body {
+  font-family: Arial, sans-serif;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  align-items: flex-start;
+  gap: 64px;
+  padding: 16px;
+}
+
+.card {
+  position: relative;
+  width: 300px;
+  border: 2px solid #333;
+  border-radius: 8px;
+  padding-top: 150px; // место для картинки сверху
+  box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+  background: #fff;
+
+  .img-wrapper {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: auto;
+
+    img {
+      width: 100%;
+      display: block;
+      object-fit: cover;
+      object-position: top; // выравнивание по верхнему краю
+    }
+
+    h4 {
+      width: 260px;
+      position: absolute;
+      z-index: 2;
+      top: 130px; // чтобы было прямо на стыке с контентом
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+      margin: 0;
+      padding: 5px 10px;
+      border: 2px solid #333;
+      background: #fafafa;
+      font-weight: bold;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.85); /* полупрозрачная подложка */
+      backdrop-filter: blur(4px); /* красивое блюр-стекло */
+    }
+  }
+
+  .content {
+    position: relative;
+    z-index: 1; // текст выше картинки, но ниже заголовка
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.7); /* полупрозрачная подложка */
+    backdrop-filter: blur(4px); /* красивое блюр-стекло */
+  }
+}
+
+.attributes {
+  margin-top: 6px;
+  font-size: 14px;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 8px;
+}
+
+.attribute {
+  display: flex;
+  flex-direction: column;
+  background: #f0f0f0;
+  padding: 6px;
+  gap: 2px;
+  border-radius: 12px;
+  text-align: center;
+}
+
+.section {
+  margin-top: 8px;
+  font-size: 14px;
+}
+
+ul {
+  margin: 4px 0;
+  padding-left: 18px;
+}

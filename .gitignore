@@ -3,3 +3,4 @@ jsons
 !package*
 node_modules
 dist
+*.css

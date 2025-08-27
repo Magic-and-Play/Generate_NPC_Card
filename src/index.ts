@@ -74,7 +74,7 @@ function renderCard(npc) {
   const attacks = (npc.items || [])
     .filter(i => i.type === "weapon")
     .map(w => {
-      const has =
+      const modifier =
         sys.abilities[
           w?.system?.ability
             ? w.system.ability
@@ -83,7 +83,7 @@ function renderCard(npc) {
             : "str"
         ].value;
       // Если есть фехтовальное или боеприпас - то ловкость
-      let attribute = calcAbilityModifier(has);
+      let attribute = calcAbilityModifier(modifier);
 
       let dmg = w.system?.damage?.parts?.[0] || [];
 
@@ -91,7 +91,7 @@ function renderCard(npc) {
 
       return {
         name: w.name,
-        bonus: w.system?.attackBonus ?? attribute + proficiencyByCR(sys.details?.cr),
+        bonus: w.system?.attackBonus || attribute + proficiencyByCR(sys.details?.cr),
         damage: dmg,
       };
     });
@@ -109,56 +109,59 @@ function renderCard(npc) {
 
   return `
     <div class="card">
-      <h6>${npc.name}</h6>
+      <div class="img-wrapper">
+        <img src="${npc.img}" alt="Bandit"/>
+        <h4>${npc.name}</h4>
+      </div>
+      <div class='content'>
+        ${
+          abilities.length
+            ? `<div class="attributes">
+            ${abilities
+              .map(
+                ([k, v]) => `
+              <div class="attribute">
+                <span>${k}</span> <span>${v}</span>
+              </div>
+            `,
+              )
+              .join("")}
+          </div>`
+            : ""
+        }
 
-      ${
-        abilities.length
-          ? `<div class="attributes">
-          ${abilities
-            .map(
-              ([k, v]) => `
-            <div class="attribute">
-              <span>${k}</span> <span>${v}</span>
-            </div>
-          `,
-            )
-            .join("")}
+        ${
+          hp || ac || speed
+            ? `<div class="section">
+            ${hp ? `ХП: ${hp}` : ""} 
+            ${ac ? `КД: ${ac}` : ""} 
+            ${speed ? `СК: ${speed}` : ""}
+          </div>`
+            : ""
+        }
+
+        ${
+          attacks.length
+            ? `<div class="section">
+          <b>Атаки: ${multiAttack}</b>
+          <ul>
+            ${attacks.map(a => `<li>${a.name} ${a.bonus ? `(${a.bonus})` : ""} — ${a.damage}</li>`).join("")}
+          </ul>
         </div>`
-          : ""
-      }
+            : ""
+        }
 
-      ${
-        hp || ac || speed
-          ? `<div class="section">
-          ${hp ? `ХП: ${hp}` : ""} 
-          ${ac ? `КД: ${ac}` : ""} 
-          ${speed ? `СК: ${speed}` : ""}
+        ${
+          abilitiesList.length
+            ? `<div class="section">
+          <b>Способности:</b>
+          <ul>
+            ${abilitiesList.map(ab => `<li>${ab.title}</li>`).join("")}
+          </ul>
         </div>`
-          : ""
-      }
-
-      ${
-        attacks.length
-          ? `<div class="section">
-        <b>Атаки: ${multiAttack}</b>
-        <ul>
-          ${attacks.map(a => `<li>${a.name} ${a.bonus ? `(${a.bonus})` : ""} — ${a.damage}</li>`).join("")}
-        </ul>
-      </div>`
-          : ""
-      }
-
-      ${
-        abilitiesList.length
-          ? `<div class="section">
-        <b>Способности:</b>
-        <ul>
-          ${abilitiesList.map(ab => `<li>${ab.title}</li>`).join("")}
-        </ul>
-      </div>`
-          : ""
-      }
-
+            : ""
+        }
+      </div>
     </div>
   `;
 }
@@ -168,50 +171,14 @@ function generateHTML(npcs) {
   <html>
   <head>
     <meta charset="utf-8"/>
-    <style>
-      body {
-        font-family: Arial, sans-serif;
-        display: flex;
-        flex-wrap: wrap;
-        align-content: flex-start;
-        align-items: flex-start;
-        gap: 16px;
-        padding: 16px;
-      }
-      .card {
-        width: 250px;
-        border: 2px solid #333;
-        border-radius: 8px;
-        padding: 10px;
-        box-shadow: 2px 2px 6px rgba(0,0,0,0.2);
-      }
-      .card h6 { margin: 0; font-size: 18px; }
-      .attributes {
-        margin-top: 6px;
-        font-size: 14px;
-        display: flex;
-        justify-content: space-between;
-        padding: 0 8px;
-      }
-      .attribute {
-        display: flex;
-        flex-direction: column;
-        background: #f0f0f0;
-        padding: 6px;
-        gap: 2px;
-        border-radius: 12px;
-        text-align: center;
-      }
-      .section { margin-top: 8px; font-size: 14px; }
-      ul { margin: 4px 0; padding-left: 18px; }
-    </style>
+    <link rel="stylesheet" href="style.css"/>
   </head>
   <body>
     ${npcs.map(renderCard).join("")}
   </body>
   </html>
   `;
-  fs.writeFileSync("npcs.html", html, "utf-8");
+  fs.writeFileSync("./dist/cards.html", html, "utf-8");
 }
 
 generateHTML(npcs);
