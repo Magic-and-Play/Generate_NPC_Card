@@ -1,19 +1,15 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import fs from "fs";
+import path from "path";
 import { calcAbilityModifier, formatCR, parseCR, proficiencyByCR, extractFirstParagraph } from "#utils";
 
-const VERSION = "1.2"; // Версия скрипта
-
-// Загружаем JSON из файла
-const rawTia = fs.readFileSync("jsons/Tiamat.json", "utf-8");
-const rawBan = fs.readFileSync("jsons/Bandit.json", "utf-8");
-const rawTor = fs.readFileSync("jsons/Tortle.json", "utf-8");
-const rawNec = fs.readFileSync("jsons/Necromancer.json", "utf-8");
-const npcTia = JSON.parse(rawTia);
-const npcTor = JSON.parse(rawTor);
-const npcBan = JSON.parse(rawBan);
-const npcNec = JSON.parse(rawNec);
-const npcs = [npcTia, npcTor, npcBan, npcNec];
+const dir = path.resolve("jsons");
+const files = fs.readdirSync(dir);
+const jsonFiles = files.filter(file => file.endsWith(".json"));
+const npcs = jsonFiles.map(file => {
+  const filePath = path.join(dir, file);
+  const raw = fs.readFileSync(filePath, "utf-8");
+  return JSON.parse(raw);
+});
 
 function renderCard(npc) {
   const sys = npc.system || {};
@@ -104,7 +100,9 @@ function renderCard(npc) {
   const multiAttack = multiAttackRaw ? extractFirstParagraph(multiAttackRaw) : "";
 
   // Способности (feats и classFeatures)
-  const abilitiesList = (npc.items || []).filter(i => ["feat", "classFeature"].includes(i.type)).map(f => f.name);
+  const abilitiesList = (npc.items || [])
+    .filter(i => ["feat", "classFeature"].includes(i.type))
+    .map(f => ({ title: f.name, description: extractFirstParagraph(f?.system?.description?.value ?? "") }));
 
   // Заметки
   const notes = sys.details?.biography?.value || sys.details?.type?.value || "";
@@ -155,7 +153,7 @@ function renderCard(npc) {
           ? `<div class="section">
         <b>Способности:</b>
         <ul>
-          ${abilitiesList.map(ab => `<li>${ab}</li>`).join("")}
+          ${abilitiesList.map(ab => `<li>${ab.title}</li>`).join("")}
         </ul>
       </div>`
           : ""
