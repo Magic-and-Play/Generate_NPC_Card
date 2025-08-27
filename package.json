@@ -1,0 +1,25 @@
+{
+  "name": "scripts",
+  "version": "1.0.0",
+  "description": "Этот скрипт предназначен для генерации карточек персонажей по данным из JSON-файла для настольной игры Dungeons & Dragons (DnD).",
+  "homepage": "https://github.com/Magic-and-Play/Generate_NPC_Card#readme",
+  "bugs": {
+    "url": "https://github.com/Magic-and-Play/Generate_NPC_Card/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Magic-and-Play/Generate_NPC_Card.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "generateCard.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "imports": {
+    "#utils": "./utils/index.js",
+    "#assets": "./assets/index.js",
+    "#styles": "./styles/index.js"
+  }
+}

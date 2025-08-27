@@ -1,61 +1,18 @@
 import fs from "fs";
+import { calcAbilityModifier, formatCR, parseCR, proficiencyByCR, extractFirstParagraph } from "#utils";
 
-const VERSION = "1.1"; // Версия скрипта
-
-const calcAbilityModifier = score => Math.floor((score - 10) / 2);
-
-// --- helpers: CR formatting & proficiency ---
-function parseCR(raw) {
-  // Принимает число (0.125) или строку ("1/8", "2")
-  if (raw == null) return null;
-  if (typeof raw === "number") return raw;
-
-  const s = String(raw).trim();
-  if (s.includes("/")) {
-    const [n, d] = s.split("/").map(Number);
-    if (!isNaN(n) && !isNaN(d) && d !== 0) return n / d;
-    return null;
-  }
-  const num = Number(s.replace(",", ".")); // на всякий случай
-  return isNaN(num) ? null : num;
-}
-
-function formatCR(value) {
-  if (value == null) return null;
-  const v = Number(value);
-
-  // Почти-равенства для дробей
-  const eq = (a, b, eps = 1e-6) => Math.abs(a - b) < eps;
-
-  if (eq(v, 0)) return "0";
-  if (eq(v, 0.125)) return "1/8";
-  if (eq(v, 0.25)) return "1/4";
-  if (eq(v, 0.5)) return "1/2";
-
-  // Целые красиво без .0
-  if (Number.isInteger(v)) return String(v);
-
-  // На всякий случай: показать до 2 знаков
-  return v.toFixed(2).replace(/\.00$/, "");
-}
-
-function proficiencyByCR(rawCR) {
-  const cr = parseCR(rawCR);
-  if (cr == null) return null;
-
-  if (cr <= 4) return 2; // включает 0, 1/8, 1/4, 1/2, 1..4
-  if (cr <= 8) return 3;
-  if (cr <= 12) return 4;
-  if (cr <= 16) return 5;
-  if (cr <= 20) return 6;
-  if (cr <= 24) return 7;
-  if (cr <= 28) return 8;
-  return 9; // 29–30
-}
+const VERSION = "1.2"; // Версия скрипта
 
 // Загружаем JSON из файла
-const raw = fs.readFileSync("Bandit.json", "utf-8");
-const npcs = JSON.parse(raw);
+const rawTia = fs.readFileSync("./jsons/Tiamat.json", "utf-8");
+const rawBan = fs.readFileSync("./jsons/Bandit.json", "utf-8");
+const rawTor = fs.readFileSync("./jsons/Tortle.json", "utf-8");
+const rawNec = fs.readFileSync("./jsons/Necromancer.json", "utf-8");
+const npcTia = JSON.parse(rawTia);
+const npcTor = JSON.parse(rawTor);
+const npcBan = JSON.parse(rawBan);
+const npcNec = JSON.parse(rawNec);
+const npcs = [npcTia, npcTor, npcBan, npcNec];
 
 function renderCard(npc) {
   const sys = npc.system || {};
@@ -74,17 +31,60 @@ function renderCard(npc) {
 
   // Основные статы
   const hp = sys.attributes?.hp?.value;
-  let ac = sys.attributes?.ac?.value || sys.attributes?.ac?.calc;
-  if (ac === "default") {
-    ac = 10 + calcAbilityModifier(sys.abilities?.dex?.value);
+  let ac = sys.attributes?.ac?.flat ?? sys.attributes?.ac?.calc;
+  switch (ac) {
+    case "default":
+      const armor = npc.items.find(i => i.type === "armor")?.system?.armor?.value || 10;
+      ac = armor + calcAbilityModifier(sys.abilities?.dex?.value);
+      break;
+
+    default:
+      // ac = 10 + calcAbilityModifier(sys.abilities?.dex?.value);
+      break;
   }
-  const speed = sys.attributes?.movement?.walk;
+
+  let speed = "";
+  for (const key in sys.attributes?.movement ?? {}) {
+    if (typeof sys.attributes.movement[key] === "number" && sys.attributes.movement[key] !== 0) {
+      switch (key) {
+        case "burrow":
+          speed = speed + ` коп ${sys.attributes.movement[key]},`;
+          break;
+
+        case "climb":
+          speed = speed + ` лаз ${sys.attributes.movement[key]},`;
+          break;
+
+        case "fly":
+          speed = speed + ` полет ${sys.attributes.movement[key]},`;
+          break;
+
+        case "swim":
+          speed = speed + ` плав ${sys.attributes.movement[key]},`;
+          break;
+
+        case "walk":
+          speed = speed + ` ${sys.attributes.movement[key]}фт`;
+          break;
+
+        default:
+          break;
+      }
+    }
+  }
 
   // Атаки = предметы-оружие
   const attacks = (npc.items || [])
     .filter(i => i.type === "weapon")
     .map(w => {
-      const has = sys.abilities[w.system?.properties?.some(w => w === "amm" || w === "fin") ? "dex" : "str"].value;
+      const has =
+        sys.abilities[
+          w?.system?.ability
+            ? w.system.ability
+            : w.system?.properties?.some(w => w === "amm" || w === "fin")
+            ? "dex"
+            : "str"
+        ].value;
       // Если есть фехтовальное или боеприпас - то ловкость
       let attribute = calcAbilityModifier(has);
 
@@ -94,10 +94,13 @@ function renderCard(npc) {
 
       return {
         name: w.name,
-        bonus: w.system?.attackBonus || attribute + proficiencyByCR(sys.details?.cr),
+        bonus: w.system?.attackBonus ?? attribute + proficiencyByCR(sys.details?.cr),
         damage: dmg,
       };
     });
+
+  const multiAttackRaw = (npc.items || []).find(i => i.name === "Мультиатака")?.system?.description?.value;
+  const multiAttack = multiAttackRaw ? extractFirstParagraph(multiAttackRaw) : "";
 
   // Способности (feats и classFeatures)
   const abilitiesList = (npc.items || []).filter(i => ["feat", "classFeature"].includes(i.type)).map(f => f.name);
@@ -108,7 +111,6 @@ function renderCard(npc) {
   return `
     <div class="card">
       <h6>${npc.name}</h6>
-      <div><i>${sys.details?.type?.subtype || ""} — ${sys.details?.alignment || ""}</i></div>
 
       ${
         abilities.length
@@ -129,7 +131,7 @@ function renderCard(npc) {
       ${
         hp || ac || speed
           ? `<div class="section">
-          ${hp ? `ХИ: ${hp}` : ""} 
+          ${hp ? `ХП: ${hp}` : ""} 
           ${ac ? `КД: ${ac}` : ""} 
           ${speed ? `СК: ${speed}` : ""}
         </div>`
@@ -139,7 +141,7 @@ function renderCard(npc) {
       ${
         attacks.length
           ? `<div class="section">
-        <b>Атаки:</b>
+        <b>Атаки: ${multiAttack}</b>
         <ul>
           ${attacks.map(a => `<li>${a.name} ${a.bonus ? `(${a.bonus})` : ""} — ${a.damage}</li>`).join("")}
         </ul>
@@ -158,7 +160,6 @@ function renderCard(npc) {
           : ""
       }
 
-      ${notes ? `<div class="section"><b>Заметки:</b> ${notes}</div>` : ""}
     </div>
   `;
 }
@@ -174,6 +175,7 @@ function generateHTML(npcs) {
         display: flex;
         flex-wrap: wrap;
         align-content: flex-start;
+        align-items: flex-start;
         gap: 16px;
         padding: 16px;
       }
@@ -206,7 +208,7 @@ function generateHTML(npcs) {
     </style>
   </head>
   <body>
-    ${[npcs].map(renderCard).join("")}
+    ${npcs.map(renderCard).join("")}
   </body>
   </html>
   `;
