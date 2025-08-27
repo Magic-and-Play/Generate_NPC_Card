@@ -1,13 +1,14 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import fs from "fs";
 import { calcAbilityModifier, formatCR, parseCR, proficiencyByCR, extractFirstParagraph } from "#utils";
 
 const VERSION = "1.2"; // Версия скрипта
 
 // Загружаем JSON из файла
-const rawTia = fs.readFileSync("./jsons/Tiamat.json", "utf-8");
-const rawBan = fs.readFileSync("./jsons/Bandit.json", "utf-8");
-const rawTor = fs.readFileSync("./jsons/Tortle.json", "utf-8");
-const rawNec = fs.readFileSync("./jsons/Necromancer.json", "utf-8");
+const rawTia = fs.readFileSync("jsons/Tiamat.json", "utf-8");
+const rawBan = fs.readFileSync("jsons/Bandit.json", "utf-8");
+const rawTor = fs.readFileSync("jsons/Tortle.json", "utf-8");
+const rawNec = fs.readFileSync("jsons/Necromancer.json", "utf-8");
 const npcTia = JSON.parse(rawTia);
 const npcTor = JSON.parse(rawTor);
 const npcBan = JSON.parse(rawBan);
@@ -64,7 +65,7 @@ function renderCard(npc) {
           break;
 
         case "walk":
-          speed = speed + ` ${sys.attributes.movement[key]}фт`;
+          speed = speed + ` ${sys.attributes.movement[key]} фт`;
           break;
 
         default:
